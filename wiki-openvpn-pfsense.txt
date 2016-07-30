@@ -1,0 +1,81 @@
+OpenVPN Wiki
+Implementing a load-balancing/failover configuration
+Client
+
+The OpenVPN client configuration can refer to multiple servers for load balancing and failover. For example:
+
+    remote server1.mydomain
+    remote server2.mydomain
+    remote server3.mydomain
+
+will direct the OpenVPN client to attempt a connection with server1, server2, and server3 in that order. If an existing connection is broken, the OpenVPN client will retry the most recently connected server, and if that fails, will move on to the next server in the list. You can also direct the OpenVPN client to randomize its server list on startup, so that the client load will be probabilistically spread across the server pool.
+
+    remote-random
+
+If you would also like DNS resolution failures to cause the OpenVPN client to move to the next server in the list, add the following:
+
+    resolv-retry 60
+
+The 60 parameter tells the OpenVPN client to try resolving each remote DNS name for 60 seconds before moving on to the next server in the list.
+
+The server list can also refer to multiple OpenVPN server daemons running on the same machine, each listening for connections on a different port, for example:
+
+    remote smp-server1.mydomain 8000
+    remote smp-server1.mydomain 8001
+    remote smp-server2.mydomain 8000
+    remote smp-server2.mydomain 8001
+
+If your servers are multi-processor machines, running multiple OpenVPN daemons on each server can be advantageous from a performance standpoint.
+
+OpenVPN also supports the remote directive referring to a DNS name which has multiple A records in the zone configuration for the domain. In this case, the OpenVPN client will randomly choose one of the A records every time the domain is resolved.
+Server
+
+The simplest approach to a load-balanced/failover configuration on the server is to use equivalent configuration files on each server in the cluster, except use a different virtual IP address pool for each server. For example:
+
+server1
+
+    server 10.8.0.0 255.255.255.0
+
+server2
+
+    server 10.8.1.0 255.255.255.0
+
+server3
+
+    server 10.8.2.0 255.255.255.0
+
+--------
+pfSense Wiki
+
+OpenVPN Configuration
+
+First, get OpenVPN working as desired on the primary WAN interface. Once it is properly functioning, make a backup just in case.
+Bind to Localhost and Setup Port Forwards
+
+The OpenVPN configuration needs to be adjusted so it can be reached from either WAN. The simplest way to do this is by changing the Interface on the VPN connection to be Localhost, and then adding a port forward on each WAN to redirect the OpenVPN port to Localhost (127.0.0.1).
+
+For example: If there are two WANs and the OpenVPN server is running on port 1194, set the Interface to Localhost, then add two port forwards:
+
+    WAN1 - UDP, Source *, Destination WAN1 Address port 1194, redirect target 127.0.0.1 port 1194
+    WAN2 - UDP, Source *, Destination WAN2 Address port 1194, redirect target 127.0.0.1 port 1194
+
+Configure Clients
+
+Clients may be configured to use the second WAN by adding a second remote statement to their configuration, such as:
+
+remote x.x.x.x 1194 udp
+
+Where x.x.x.x is the second WAN IP address or host name.
+
+This process can be automated by using the OpenVPN Client Export package. When exporting a client, in Host Name Resolution choose one of:
+
+    Automagic Multi-WAN IPs (port forward targets): Adds a remote statement for each port forward found targeting the interface binding and port used by this VPN, uses the IP address of each WAN as-is.
+    Automagic Multi-WAN DDNS Hostnames (port forward targets): Like above, but uses the first located Dynamic DNS hostname for a given WAN. If the WAN is a private IP, this may be the better choice.
+
+More than two WAN connections
+
+The same steps can be repeated to add more WAN connections. Add a port forward to any additional WAN. Clients will need an updated configuration file if another WAN is added later. 
+
+--------
+https://openvpn.net/index.php/open-source/documentation/howto.html#loadbalance
+https://doc.pfsense.org/index.php/Multi-WAN_OpenVPN
